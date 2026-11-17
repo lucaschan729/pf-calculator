@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>保費融資計算器</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"PingFang HK","Microsoft JhengHei",sans-serif;background:#f4f6fa;color:#1f2937}
+  header{background:linear-gradient(135deg,#0f3d6e,#1f6fb2);color:#fff;padding:28px 20px}
+  header h1{margin:0 0 6px;font-size:24px}
+  header p{margin:0;opacity:.85;font-size:14px}
+  main{max-width:1200px;margin:0 auto;padding:20px}
+  section{background:#fff;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+  h2{margin:0 0 16px;font-size:18px;display:flex;align-items:center;gap:8px}
+  h2 span{background:#1f6fb2;color:#fff;border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+  label{display:block;font-size:13px;color:#4b5563;margin-bottom:4px}
+  input[type=text],select{width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px}
+  input:focus,select:focus{outline:2px solid #93c5fd}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:18px}
+  .card{background:#eff6ff;border-radius:10px;padding:12px 14px}
+  .card small{color:#4b5563;font-size:12px}
+  .card b{display:block;font-size:19px;color:#0f3d6e;margin-top:4px}
+  .btn{background:#1f6fb2;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:14px;cursor:pointer}
+  .btn.alt{background:#fff;color:#1f6fb2;border:1px solid #1f6fb2}
+  .btn.green{background:#15803d}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+  .tip{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:14px}
+  .scroll{overflow:auto;max-height:520px;border:1px solid #e5e7eb;border-radius:8px}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border-bottom:1px solid #e5e7eb;padding:6px 10px;text-align:right;white-space:nowrap}
+  th{background:#f1f5f9;position:sticky;top:0;z-index:1}
+  td:first-child,th:first-child{text-align:left;position:sticky;left:0;background:#f8fafc;font-weight:600}
+  th:first-child{z-index:2}
+  #vals input{text-align:right}
+  .neg{color:#dc2626}
+  .sum td{background:#f8fafc;font-weight:600}
+  .tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .tab{padding:7px 14px;border-radius:20px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-size:13px}
+  .tab.on{background:#1f6fb2;color:#fff;border-color:#1f6fb2}
+  #modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;align-items:center;justify-content:center;padding:16px}
+  #modal .box{background:#fff;border-radius:12px;padding:20px;max-width:900px;width:100%;max-height:90vh;overflow:auto}
+  footer{font-size:12px;color:#6b7280;text-align:center;padding:10px 20px 30px}
+</style>
+</head>
+<body>
+<header>
+  <h1>保費融資計算器</h1>
+  <p>逐年回報與較差情境分析｜支援匯入保單建議書及匯出 Excel</p>
+</header>
+<main>
+  <section>
+    <h2><span>1</span>保單與融資設定</h2>
+    <div class="grid">
+      <div><label>貨幣</label><select id="cur"><option value="HK$">HK$ 港元</option><option value="US$">US$ 美元</option></select></div>
+      <div><label>折扣後總保費</label><input type="text" id="prem" value="1,395,000"></div>
+      <div><label>首日退保價值</label><input type="text" id="dsv" value="1,240,000"></div>
+      <div><label>借貸成數 LTV（%，按首日退保價值）</label><input type="text" id="ltv" value="90"></div>
+      <div><label>每年手續費（%）</label><input type="text" id="afee" value="0"></div>
+      <div><label>融資利率・現況（%）</label><input type="text" id="rate" value="4.48"></div>
+      <div><label>融資利率・上限（%）</label><input type="text" id="cap" value="6"></div>
+      <div><label>分紅實現率假設（%）</label><input type="text" id="ful" value="80"></div>
+      <div><label>一次性手續費</label><input type="text" id="ofee" value="0"></div>
+    </div>
+    <div class="cards">
+      <div class="card"><small>借貸金額</small><b id="cLoan"></b></div>
+      <div class="card"><small>保費首付（自付）</small><b id="cDown"></b></div>
+      <div class="card"><small>槓桿（保費÷自付）</small><b id="cLev"></b></div>
+      <div class="card"><small>每年還款（現況）</small><b id="cAnn"></b></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span>2</span>逐年退保價值（由保單建議書填入）</h2>
+    <div class="bar">
+      <input type="file" id="file" accept=".pdf,.xlsx,.xls,.csv" style="display:none">
+      <button class="btn" onclick="document.getElementById('file').click()">📄 上載保單建議書（PDF / Excel / CSV）</button>
+      <label style="margin:0">年期：</label>
+      <input type="text" id="yrs" value="10" style="width:70px">
+      <button class="btn alt" onclick="clearVals()">清空</button>
+      <span id="msg" style="font-size:13px;color:#b45309"></span>
+    </div>
+    <div class="tip">💡 亦可在 Excel 或建議書圈選「保證」「預期」兩欄數字，複製後點擊表格任何一格貼上（⌘/Ctrl + V），會由該格起自動填入。</div>
+    <div class="scroll" style="max-height:360px">
+      <table id="vals"><thead><tr><th>年</th><th>保證退保價值</th><th>預期退保價值</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span>3</span>融資後現金流與回報（逐年退保）</h2>
+    <div class="bar">
+      <div class="tabs" id="tabs" style="margin:0"></div>
+      <button class="btn green" onclick="exportXlsx()" style="margin-left:auto">⬇ 匯出 Excel</button>
+    </div>
+    <div class="scroll"><table id="res"></table></div>
+  </section>
+</main>
+<footer>本工具只供參考，不構成任何投資或保險建議。非保證金額及利率可能變動，實際條款以保險公司及銀行文件為準。</footer>
+
+<div id="modal"><div class="box">
+  <h2>選擇建議書內的表格與欄位</h2>
+  <div class="grid" style="margin-bottom:14px">
+    <div><label>偵測到的表格</label><select id="mTable"></select></div>
+    <div><label>「保證退保價值」欄</label><select id="mG"></select></div>
+    <div><label>「預期退保價值（總額）」欄</label><select id="mE"></select></div>
+  </div>
+  <div class="tip">請對照建議書確認欄位是否正確；系統只作初步猜測。</div>
+  <div class="scroll" style="max-height:300px"><table id="mPrev"></table></div>
+  <div class="bar" style="margin:14px 0 0;justify-content:flex-end">
+    <button class="btn alt" onclick="closeModal()">取消</button>
+    <button class="btn" onclick="applyImport()">套入</button>
+  </div>
+</div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const MAXY = 50;
+let N = 10, g = [], e = [], cur = 'HK$', scn = 0, tables = [];
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const num = s => { const v = parseFloat(String(s).replace(/[,\s$]/g, '')); return isNaN(v) ? null : v; };
+const fmt = v => v == null ? '—' : (v < 0 ? '-' : '') + cur + Math.abs(Math.round(v)).toLocaleString('en-US');
+const pct = (v, d) => v == null ? '—' : (v * 100).toFixed(d) + '%';
+const cls = v => (v != null && v < 0) ? ' class="neg"' : '';
+
+function P() {
+  const prem = num($('prem').value) || 0, dsv = num($('dsv').value) || 0, ltv = num($('ltv').value) || 0;
+  const loan = dsv * ltv / 100;
+  return { prem, dsv, ltv, loan, down: prem - loan,
+    afee: num($('afee').value) || 0, rate: num($('rate').value) || 0, cap: num($('cap').value) || 0,
+    ful: num($('ful').value) ?? 100, ofee: num($('ofee').value) || 0 };
+}
+
+function irr(cf) {
+  if (!(cf.some(v => v > 0) && cf.some(v => v < 0))) return null;
+  const f = r => cf.reduce((s, v, t) => s + v / Math.pow(1 + r, t), 0);
+  let lo = -0.9999, hi = 10;
+  const flo = f(lo);
+  if ((flo > 0) === (f(hi) > 0)) return null;
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2;
+    if ((f(mid) > 0) === (flo > 0)) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+function scnNames() {
+  const f = P().ful;
+  return ['預期（分紅100%）', '分紅 ' + f + '%', '利率升至上限', '分紅 ' + f + '%＋利率上限'];
+}
+
+// s: bit0 = 分紅打折, bit1 = 利率上限
+function calc(s) {
+  const p = P();
+  const rate = (s & 2) ? p.cap : p.rate;
+  const ful = (s & 1) ? p.ful / 100 : 1;
+  const annual = p.loan * (rate + p.afee) / 100;
+  const init = p.down + p.ofee;
+  const cols = [];
+  for (let k = 1; k <= N; k++) {
+    const ev = e[k - 1];
+    if (ev == null) { cols.push(null); continue; }
+    const gv = g[k - 1] ?? 0;
+    const sv = gv + (ev - gv) * ful;
+    const back = sv - p.loan;
+    const cfs = [-init];
+    for (let t = 1; t < k; t++) cfs.push(-annual);
+    cfs.push(back - annual);
+    const outlay = init + annual * k;
+    const net = back - outlay;
+    cols.push({ cfs, net, netPct: init ? net / init : null, irr: irr(cfs), outlay, sv, back });
+  }
+  return { cols, annual, init };
+}
+
+function renderSummary() {
+  const p = P();
+  $('cLoan').textContent = fmt(p.loan);
+  $('cDown').textContent = fmt(p.down);
+  $('cLev').textContent = p.down > 0 ? (p.prem / p.down).toFixed(2) + 'x' : '—';
+  $('cAnn').textContent = fmt(p.loan * (p.rate + p.afee) / 100);
+}
+
+function renderTabs() {
+  $('tabs').innerHTML = scnNames().map((n, i) =>
+    '<div class="tab' + (i === scn ? ' on' : '') + '" onclick="scn=' + i + ';renderAll()">' + n + '</div>').join('');
+}
+
+function renderVals() {
+  let h = '';
+  for (let i = 0; i < N; i++) {
+    h += '<tr><td>' + (i + 1) + '</td>' +
+      '<td><input type="text" data-r="' + i + '" data-c="0" value="' + (g[i] != null ? g[i].toLocaleString('en-US') : '') + '"></td>' +
+      '<td><input type="text" data-r="' + i + '" data-c="1" value="' + (e[i] != null ? e[i].toLocaleString('en-US') : '') + '"></td></tr>';
+  }
+  $('vals').tBodies[0].innerHTML = h;
+}
+
+function renderRes() {
+  const r = calc(scn);
+  let h = '<thead><tr><th>現金流／退保年</th>';
+  for (let k = 1; k <= N; k++) h += '<th>第' + k + '年</th>';
+  h += '</tr></thead><tbody>';
+  for (let t = 0; t <= N; t++) {
+    h += '<tr><td>' + (t === 0 ? '第0年（自付）' : '第' + t + '年') + '</td>';
+    for (let k = 1; k <= N; k++) {
+      const c = r.cols[k - 1];
+      if (t > k) h += '<td></td>';
+      else if (!c) h += '<td>' + (t === 0 ? '—' : '') + '</td>';
+      else h += '<td' + cls(c.cfs[t]) + '>' + fmt(c.cfs[t]) + '</td>';
+    }
+    h += '</tr>';
+  }
+  const rows = [
+    ['淨賺', c => fmt(c.net), c => c.net],
+    ['淨賺／首期', c => pct(c.netPct, 1), c => c.netPct],
+    ['IRR', c => pct(c.irr, 2), c => c.irr],
+    ['期間總支出', c => fmt(c.outlay), () => 0],
+    ['到期退保價值', c => fmt(c.sv), () => 0],
+    ['到期取回（已還貸款）', c => fmt(c.back), c => c.back]
+  ];
+  rows.forEach(([name, f, v]) => {
+    h += '<tr class="sum"><td>' + name + '</td>';
+    r.cols.forEach(c => { h += c ? '<td' + cls(v(c)) + '>' + f(c) + '</td>' : '<td>—</td>'; });
+    h += '</tr>';
+  });
+  $('res').innerHTML = h + '</tbody>';
+}
+
+function renderAll() { renderSummary(); renderTabs(); renderRes(); }
+
+// ---------- 輸入事件 ----------
+['prem', 'dsv', 'ltv', 'afee', 'rate', 'cap', 'ful', 'ofee'].forEach(id => $(id).addEventListener('input', renderAll));
+$('cur').addEventListener('change', () => { cur = $('cur').value; renderAll(); });
+$('yrs').addEventListener('change', () => {
+  N = Math.min(MAXY, Math.max(1, Math.round(num($('yrs').value) || 10)));
+  $('yrs').value = N; renderVals(); renderAll();
+});
+$('vals').addEventListener('input', ev => {
+  const t = ev.target; if (!t.dataset.r) return;
+  (t.dataset.c === '0' ? g : e)[+t.dataset.r] = num(t.value);
+  renderRes();
+});
+$('vals').addEventListener('paste', ev => {
+  const t = ev.target; if (!t.dataset.r) return;
+  const text = (ev.clipboardData || window.clipboardData).getData('text');
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+  if (lines.length < 2 && !/\t/.test(text)) return; // 單一數值按正常貼上
+  ev.preventDefault();
+  const r0 = +t.dataset.r, c0 = +t.dataset.c;
+  lines.forEach((line, i) => {
+    const cells = line.split(/\t/).length > 1 ? line.split(/\t/) : line.trim().split(/\s{2,}| (?=[\d$-])/);
+    cells.forEach((cell, j) => {
+      const c = c0 + j, r = r0 + i;
+      if (c > 1 || r >= MAXY) return;
+      (c === 0 ? g : e)[r] = num(cell);
+      if (r + 1 > N) N = r + 1;
+    });
+  });
+  $('yrs').value = N; renderVals(); renderAll();
+});
+function clearVals() { g = []; e = []; renderVals(); renderAll(); }
+
+// ---------- 匯入建議書 ----------
+$('file').addEventListener('change', async ev => {
+  const f = ev.target.files[0]; if (!f) return;
+  $('msg').textContent = '讀取中…';
+  try {
+    const buf = await f.arrayBuffer();
+    const rows = /\.pdf$/i.test(f.name) ? await parsePdf(buf) : parseSheet(buf);
+    tables = buildTables(rows);
+    if (!tables.length) { $('msg').textContent = '未能偵測到逐年數值表（掃描版 PDF 無法讀取），請改用複製貼上。'; }
+    else { $('msg').textContent = ''; openModal(); }
+  } catch (err) { $('msg').textContent = '讀取失敗：' + err.message; }
+  ev.target.value = '';
+});
+
+async function parsePdf(buf) {
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const out = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    const map = {};
+    tc.items.forEach(it => {
+      if (!it.str.trim()) return;
+      const y = Math.round(it.transform[5] / 3);
+      (map[y] = map[y] || []).push({ x: it.transform[4], s: it.str });
+    });
+    Object.keys(map).map(Number).sort((a, b) => b - a).forEach(y => {
+      out.push(map[y].sort((a, b) => a.x - b.x).map(i => i.s).join(' ').trim().split(/\s+/));
+    });
+  }
+  return out;
+}
+
+function parseSheet(buf) {
+  const wb = XLSX.read(buf, { type: 'array' });
+  const out = [];
+  wb.SheetNames.forEach(n => {
+    XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' })
+      .forEach(r => out.push(r.map(c => String(c).trim()).filter(c => c !== '')));
+  });
+  return out;
+}
+
+function tokNum(s) {
+  s = String(s).replace(/[$,]/g, '').replace(/^\((.*)\)$/, '-$1');
+  return /^-?\d+(\.\d+)?$/.test(s) ? parseFloat(s) : null;
+}
+
+function buildTables(rows) {
+  const res = []; let curT = null;
+  rows.forEach(toks => {
+    if (!toks.length) return;
+    const y = tokNum(toks[0]);
+    const vals = toks.slice(1).map(tokNum).filter(v => v != null);
+    const ok = y != null && Number.isInteger(y) && y >= 1 && y <= 150 && vals.length >= 2;
+    if (!ok) return;
+    if (curT && y > curT.rows[curT.rows.length - 1].year && vals.length === curT.cols) curT.rows.push({ year: y, vals });
+    else { curT = { cols: vals.length, rows: [{ year: y, vals }] }; res.push(curT); }
+  });
+  return res.filter(t => t.rows.length >= 3);
+}
+
+function openModal() {
+  $('mTable').innerHTML = tables.map((t, i) =>
+    '<option value="' + i + '">表 ' + (i + 1) + '：第' + t.rows[0].year + '–' + t.rows[t.rows.length - 1].year + '年，' + t.cols + ' 欄</option>').join('');
+  // 預設揀行數最多的表
+  let best = 0; tables.forEach((t, i) => { if (t.rows.length > tables[best].rows.length) best = i; });
+  $('mTable').value = best;
+  fillCols(); $('modal').style.display = 'flex';
+}
+function closeModal() { $('modal').style.display = 'none'; }
+
+function fillCols() {
+  const t = tables[+$('mTable').value];
+  const opts = Array.from({ length: t.cols }, (_, i) => '<option value="' + i + '">欄 ' + (i + 1) + '</option>').join('');
+  $('mG').innerHTML = opts; $('mE').innerHTML = opts;
+  const last = t.rows[t.rows.length - 1].vals;
+  let mx = 0; last.forEach((v, i) => { if (v > last[mx]) mx = i; });
+  $('mG').value = t.cols >= 3 ? 1 : 0;
+  $('mE').value = mx;
+  let h = '<thead><tr><th>年</th>';
+  for (let i = 0; i < t.cols; i++) h += '<th>欄 ' + (i + 1) + '</th>';
+  h += '</tr></thead><tbody>';
+  t.rows.forEach(r => { h += '<tr><td>' + r.year + '</td>' + r.vals.map(v => '<td>' + v.toLocaleString('en-US') + '</td>').join('') + '</tr>'; });
+  $('mPrev').innerHTML = h + '</tbody>';
+}
+$('mTable').addEventListener('change', fillCols);
+
+function applyImport() {
+  const t = tables[+$('mTable').value], gi = +$('mG').value, ei = +$('mE').value;
+  g = []; e = []; let maxY = 0;
+  t.rows.forEach(r => {
+    if (r.year > MAXY) return;
+    g[r.year - 1] = r.vals[gi]; e[r.year - 1] = r.vals[ei];
+    if (r.year > maxY) maxY = r.year;
+  });
+  N = Math.max(1, maxY); $('yrs').value = N;
+  closeModal(); renderVals(); renderAll();
+}
+
+// ---------- 匯出 Excel ----------
+function exportXlsx() {
+  const p = P(), wb = XLSX.utils.book_new();
+  const s1 = [
+    ['保費融資計算器'], [],
+    ['貨幣', cur], ['折扣後總保費', p.prem], ['首日退保價值', p.dsv], ['借貸成數 LTV（%）', p.ltv],
+    ['每年手續費（%）', p.afee], ['融資利率・現況（%）', p.rate], ['融資利率・上限（%）', p.cap],
+    ['分紅實現率假設（%）', p.ful], ['一次性手續費', p.ofee], [],
+    ['借貸金額', p.loan], ['保費首付（自付）', p.down],
+    ['槓桿（保費÷自付）', p.down > 0 ? +(p.prem / p.down).toFixed(2) : ''],
+    ['每年還款（現況）', Math.round(p.loan * (p.rate + p.afee) / 100)]
+  ];
+  const ws1 = XLSX.utils.aoa_to_sheet(s1); ws1['!cols'] = [{ wch: 24 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, ws1, '設定');
+
+  const s2 = [['年', '保證退保價值', '預期退保價值']];
+  for (let i = 0; i < N; i++) s2.push([i + 1, g[i] ?? '', e[i] ?? '']);
+  const ws2 = XLSX.utils.aoa_to_sheet(s2); ws2['!cols'] = [{ wch: 6 }, { wch: 16 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, ws2, '逐年退保價值');
+
+  const sheetNames = ['預期', '分紅打折', '利率上限', '分紅打折＋利率上限'];
+  scnNames().forEach((name, s) => {
+    const r = calc(s), aoa = [[name], []];
+    const head = ['現金流／退保年']; for (let k = 1; k <= N; k++) head.push('第' + k + '年');
+    aoa.push(head);
+    for (let t = 0; t <= N; t++) {
+      const row = [t === 0 ? '第0年（自付）' : '第' + t + '年'];
+      for (let k = 1; k <= N; k++) { const c = r.cols[k - 1]; row.push(c && t <= k ? Math.round(c.cfs[t]) : ''); }
+      aoa.push(row);
+    }
+    const pctRows = [];
+    const add = (label, f, isPct) => {
+      if (isPct) pctRows.push(aoa.length);
+      aoa.push([label].concat(r.cols.map(c => { if (!c) return ''; const v = f(c); return v == null ? '' : v; })));
+    };
+    add('淨賺', c => Math.round(c.net));
+    add('淨賺／首期', c => c.netPct, true);
+    add('IRR', c => c.irr, true);
+    add('期間總支出', c => Math.round(c.outlay));
+    add('到期退保價值', c => Math.round(c.sv));
+    add('到期取回（已還貸款）', c => Math.round(c.back));
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    pctRows.forEach(ri => {
+      for (let ci = 1; ci <= N; ci++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: ri, c: ci })];
+        if (cell && typeof cell.v === 'number') cell.z = '0.00%';
+      }
+    });
+    ws['!cols'] = [{ wch: 22 }].concat(Array.from({ length: N }, () => ({ wch: 13 })));
+    XLSX.utils.book_append_sheet(wb, ws, sheetNames[s]);
+  });
+  XLSX.writeFile(wb, '保費融資分析.xlsx');
+}
+
+renderVals(); renderAll();
+</script>
+</body>
+</html>
